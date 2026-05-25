@@ -33,9 +33,29 @@
           <td>{{ u.nombre }} {{ u.apellido }}</td>
           <td>{{ u.email }}</td>
           <td>{% if u.rol %}{{ u.rol.nombre }}{% else %}—{% endif %}</td>
-          <td>{% if u.activo %}Sí{% else %}No{% endif %}</td>
+          <td>{% if u.activo %}<span class="badge bg-success">Activo</span>{% else %}<span class="badge bg-danger">Bloqueado</span>{% endif %}</td>
           <td class="text-end text-nowrap">
             <a href="{% url 'admin_user_edit' u.pk %}" class="btn btn-sm btn-warning text-dark fw-semibold"><i class="bi bi-pencil"></i> Editar</a>
+            {% if u.rol and u.rol.nombre|upper == 'CLIENTE' %}
+            <a href="{% url 'admin_clientes_fieles' %}" class="btn btn-sm btn-outline-warning"><i class="bi bi-star-fill"></i> Clientes Fieles</a>
+            {% endif %}
+            {% if u.pk == user.pk %}
+            <span class="btn btn-sm btn-outline-secondary disabled"><i class="bi bi-lock"></i> Bloquear</span>
+            {% elif u.activo %}
+            <form method="post" action="{% url 'admin_user_bloqueo' u.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Bloquear la cuenta de {{ u.nombre }}?')">
+                <i class="bi bi-lock-fill"></i> Bloquear
+              </button>
+            </form>
+            {% else %}
+            <form method="post" action="{% url 'admin_user_bloqueo' u.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-success">
+                <i class="bi bi-unlock-fill"></i> Desbloquear
+              </button>
+            </form>
+            {% endif %}
             {% if u.pk == user.pk %}
             <span class="btn btn-sm btn-outline-secondary disabled" title="No puedes eliminar tu propia cuenta"><i class="bi bi-trash"></i> Eliminar</span>
             {% else %}

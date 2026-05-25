@@ -31,6 +31,7 @@
             <div class="px-3 py-2"><small class="text-muted text-uppercase fw-bold">Gestión</small></div>
             <a href="{% url 'admin_users' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-people-fill me-2"></i>Usuarios</a>
             <a href="{% url 'admin_empleados' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-person-badge me-2"></i>Empleados</a>
+            <a href="{% url 'admin_clientes_fieles' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-star-fill me-2"></i>Clientes Fieles</a>
             <div class="px-3 py-2 mt-2"><small class="text-muted text-uppercase fw-bold">Catálogo</small></div>
             <a href="{% url 'admin_categorias' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-tags me-2"></i>Categorías</a>
             <a href="{% url 'admin_productos' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-box me-2"></i>Productos</a>
@@ -48,6 +49,8 @@
             <a href="{% url 'admin_noticia_nuevo' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-plus-circle me-2"></i>Nueva noticia</a>
             <div class="px-3 py-2 mt-2"><small class="text-muted text-uppercase fw-bold">Reportes</small></div>
             <a href="{% url 'reportes_admin' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-graph-up me-2"></i>Reportes</a>
+            <div class="px-3 py-2 mt-2"><small class="text-muted text-uppercase fw-bold">Sistema</small></div>
+            <a href="{% url 'admin_modulos_bloqueo' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-shield-lock-fill me-2"></i>Bloqueo de Módulos</a>
 
           {% elif rol == 'CLIENTE' %}
             <div class="px-3 py-2"><small class="text-muted text-uppercase fw-bold">Mi cuenta</small></div>
@@ -63,6 +66,7 @@
             <div class="px-3 py-2"><small class="text-muted text-uppercase fw-bold">Mi Trabajo</small></div>
             <a href="{% url 'mi_horario' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-clock me-2"></i>Mi Horario</a>
             <a href="{% url 'pedidos_asignados' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-cart-check me-2"></i>Pedidos Asignados</a>
+            <a href="{% url 'reservas_hoy_mesero' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-calendar-day me-2"></i>Reservas del Día</a>
           {% endif %}
 
         {% endwith %}
@@ -148,5 +152,62 @@
   });
 </script>
 {% block extra_js %}{% endblock %}
+
+{% if user.is_authenticated and user.rol and user.rol.nombre == 'EMPLEADO' %}
+<div id="toast-container" style="position:fixed;top:20px;right:20px;z-index:9999;min-width:300px"></div>
+<script>
+(function(){
+  var ESTADOS = {
+    'PENDIENTE': {label:'Pendiente', color:'#ffc107', text:'#000'},
+    'CONFIRMADA': {label:'Confirmada', color:'#198754', text:'#fff'},
+    'COMPLETADA': {label:'Completada', color:'#0d6efd', text:'#fff'},
+    'CANCELADA':  {label:'Cancelada',  color:'#6c757d', text:'#fff'},
+    'NO_SE_PRESENTO': {label:'No se present\u00f3', color:'#dc3545', text:'#fff'},
+  };
+
+  function showToast(msg, color, text) {
+    var c = document.getElementById('toast-container');
+    var t = document.createElement('div');
+    t.style.cssText = 'background:'+color+';color:'+text+';padding:14px 18px;border-radius:10px;margin-bottom:10px;box-shadow:0 4px 16px rgba(0,0,0,0.35);font-size:0.95rem;font-weight:500;display:flex;align-items:center;gap:10px;animation:fadeIn .3s ease';
+    t.innerHTML = '<i class="bi bi-bell-fill" style="font-size:1.2rem"></i><span>'+msg+'</span>';
+    c.appendChild(t);
+    setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity .5s'; setTimeout(function(){ t.remove(); }, 500); }, 6000);
+  }
+
+  if (typeof EventSource !== 'undefined') {
+    var es = new EventSource('/reservas-sse/');
+    es.onmessage = function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        if (d.tipo === 'reserva') {
+          var nuevo = ESTADOS[d.estado_nuevo] || {label: d.estado_nuevo, color:'#333', text:'#fff'};
+          var anterior = d.estado_anterior ? (ESTADOS[d.estado_anterior] || {label:d.estado_anterior}).label : 'Nueva';
+          showToast('&#128197; Reserva #'+d.id+': <strong>'+anterior+' &rarr; '+nuevo.label+'</strong>', nuevo.color, nuevo.text);
+          if (Notification && Notification.permission === 'granted')
+            new Notification('Cambio en Reserva #'+d.id, {body: anterior+' → '+nuevo.label});
+        } else if (d.tipo === 'horario') {
+          showToast('&#128197; Tu horario del <strong>'+d.dia+'</strong> fue modificado: '+d.hora_inicio+' &ndash; '+d.hora_fin, '#0d6efd', '#fff');
+          if (Notification && Notification.permission === 'granted')
+            new Notification('Horario modificado', {body: d.dia+': '+d.hora_inicio+' - '+d.hora_fin});
+        } else if (d.tipo === 'horario_nuevo') {
+          showToast('&#128197; Nuevo turno asignado: <strong>'+d.dia+'</strong> '+d.hora_inicio+' &ndash; '+d.hora_fin, '#198754', '#fff');
+          if (Notification && Notification.permission === 'granted')
+            new Notification('Nuevo turno asignado', {body: d.dia+': '+d.hora_inicio+' - '+d.hora_fin});
+        } else if (d.tipo === 'horario_eliminado') {
+          showToast('&#9888; Turno eliminado del d\u00eda <strong>'+d.dia+'</strong>', '#dc3545', '#fff');
+          if (Notification && Notification.permission === 'granted')
+            new Notification('Turno eliminado', {body: 'Se elimin\u00f3 tu turno del '+d.dia});
+        }
+      } catch(err) {}
+    };
+    es.onerror = function() { es.close(); };
+    if (Notification && Notification.permission === 'default') Notification.requestPermission();
+  }
+})();
+</script>
+<style>
+@keyframes fadeIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+</style>
+{% endif %}
 </body>
 </html>

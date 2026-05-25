@@ -71,6 +71,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'users.middleware.NoCacheAuthenticatedMiddleware',
+    'users.middleware.ModuloBloqueoMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -105,7 +106,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'ROS_db',
         'USER': 'postgres',
-        'PASSWORD': 'Alex_123',
+        'PASSWORD': '101606',
         'HOST': '127.0.0.1',
         'PORT': '5432',
     }

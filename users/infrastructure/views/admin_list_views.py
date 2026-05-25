@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.storage import default_storage
-from django.db.models import ProtectedError
+from django.db.models import Count, ProtectedError
 from django.http import Http404
 from django.shortcuts import redirect, render
 
@@ -29,6 +29,7 @@ from users.application.application.use_cases.mesa_usecase import (
 from users.application.application.use_cases.noticia_usecase import CrearNoticiaUseCase
 from users.application.application.use_cases.pago_usecase import CrearPagoUseCase
 from users.application.application.use_cases.pedido_usecase import (
+    ActualizarPedidoUseCase,
     CambiarEstadoPedidoUseCase,
     CrearPedidoUseCase,
 )
@@ -53,6 +54,7 @@ from users.infrastructure.models import (
     CategoriaModel,
     InventarioModel,
     MesaModel,
+    ModuloBloqueoModel,
     PagoModel,
     PedidoModel,
     ProductoModel,
@@ -60,6 +62,7 @@ from users.infrastructure.models import (
     ReservaModel,
     RolModel,
     UserModel,
+    SolicitudCambioTurnoModel,
 )
 from users.infrastructure.models.horario_model import HorarioModel
 from users.infrastructure.repositories.categoria_repository_impl import CategoriaRepositoryImpl
@@ -208,6 +211,24 @@ def users_list_view(request):
     )
     usuarios = [_UserListRow(e, roles_by_id.get(e.rol_id)) for e in entities]
     return render(request, 'admin/users_list.html', {'usuarios': usuarios})
+
+
+@admin_only
+def user_toggle_bloqueo_view(request, pk):
+    if request.method != 'POST':
+        return redirect('admin_users')
+    try:
+        target = UserModel.objects.get(pk=pk)
+    except UserModel.DoesNotExist:
+        raise Http404
+    if target.pk == request.user.pk:
+        messages.error(request, 'No puedes bloquearte a ti mismo.')
+        return redirect('admin_users')
+    target.activo = not target.activo
+    target.save(update_fields=['activo'])
+    estado = 'desbloqueada' if target.activo else 'bloqueada'
+    messages.success(request, f'Cuenta de {target.nombre} {target.apellido} {estado} correctamente.')
+    return redirect('admin_users')
 
 
 @admin_only
@@ -1151,6 +1172,61 @@ def empleados_list_view(request):
 
 
 @admin_only
+def clientes_fieles_view(request):
+    umbral = max(1, int((request.GET.get('umbral') or '3').strip() or 3))
+    clientes = (
+        UserModel.objects
+        .filter(activo=True, rol__nombre__iexact='CLIENTE')
+        .annotate(total_pedidos=Count('pedidos_cliente', distinct=True))
+        .filter(total_pedidos__gte=umbral)
+        .order_by('-total_pedidos')
+    )
+    return render(request, 'admin/clientes_fieles.html', {'clientes': clientes, 'umbral': umbral})
+
+
+@admin_only
+def modulos_bloqueo_view(request):
+    MODULOS_DISPONIBLES = [
+        {'nombre': 'Menú',        'url_patron': '/menu/'},
+        {'nombre': 'Reservas',    'url_patron': '/reserva/'},
+        {'nombre': 'Carrito',     'url_patron': '/carrito/'},
+        {'nombre': 'Noticias',    'url_patron': '/noticias/'},
+        {'nombre': 'Promociones', 'url_patron': '/promociones/'},
+        {'nombre': 'Pedidos',     'url_patron': '/pedidos/'},
+        {'nombre': 'Pagos',       'url_patron': '/pagos/'},
+    ]
+
+    if request.method == 'POST':
+        accion = (request.POST.get('accion') or '').strip()
+        url_patron = (request.POST.get('url_patron') or '').strip()
+        motivo = (request.POST.get('motivo') or '').strip()
+        nombre = next((m['nombre'] for m in MODULOS_DISPONIBLES if m['url_patron'] == url_patron), url_patron)
+
+        if accion == 'bloquear':
+            ModuloBloqueoModel.objects.update_or_create(
+                url_patron=url_patron,
+                defaults={'nombre': nombre, 'motivo': motivo, 'bloqueado': True},
+            )
+            messages.success(request, f'Módulo «{nombre}» bloqueado correctamente.')
+        elif accion == 'desbloquear':
+            ModuloBloqueoModel.objects.filter(url_patron=url_patron).update(bloqueado=False)
+            messages.success(request, f'Módulo «{nombre}» desbloqueado correctamente.')
+        return redirect('admin_modulos_bloqueo')
+
+    bloqueados = {m.url_patron: m for m in ModuloBloqueoModel.objects.filter(bloqueado=True)}
+    modulos = []
+    for m in MODULOS_DISPONIBLES:
+        bloqueo = bloqueados.get(m['url_patron'])
+        modulos.append({
+            'nombre': m['nombre'],
+            'url_patron': m['url_patron'],
+            'bloqueado': bloqueo is not None,
+            'motivo': bloqueo.motivo if bloqueo else '',
+        })
+    return render(request, 'admin/modulos_bloqueo.html', {'modulos': modulos})
+
+
+@admin_only
 def horarios_list_view(request):
     horarios = HorarioModel.objects.select_related('user').order_by('user__nombre', 'dia_semana')
     return render(request, 'admin/horarios_list.html', {'horarios': horarios})
@@ -1351,6 +1427,57 @@ def reserva_create_view(request):
 
 
 @admin_only
+def pedido_edit_view(request, pk):
+    try:
+        pk = int(pk)
+    except (TypeError, ValueError):
+        raise Http404
+    pedido = PedidoModel.objects.filter(pk=pk).select_related('user', 'empleado_asignado').first()
+    if not pedido:
+        raise Http404
+
+    if request.method == 'POST':
+        cliente_nombre = (request.POST.get('cliente_nombre') or '').strip()
+        total_raw = (request.POST.get('total') or '').strip()
+        estado = (request.POST.get('estado') or '').strip().upper()
+        numero_mesa = (request.POST.get('numero_mesa') or '').strip() or None
+        comentarios = (request.POST.get('comentarios') or '').strip() or None
+
+        if any(c.isdigit() for c in cliente_nombre):
+            messages.error(request, 'El nombre del cliente no puede contener números.')
+            return render(request, 'admin/pedido_edit_form.html', {'pedido': pedido, 'estados': PEDIDO_ESTADOS}, status=400)
+        if numero_mesa and not numero_mesa.isdigit():
+            messages.error(request, 'El número de mesa solo puede contener dígitos.')
+            return render(request, 'admin/pedido_edit_form.html', {'pedido': pedido, 'estados': PEDIDO_ESTADOS}, status=400)
+        try:
+            total = float(total_raw.replace(',', '.'))
+            if total < 0:
+                raise ValueError
+        except ValueError:
+            messages.error(request, 'El total debe ser un número válido mayor o igual a 0.')
+            return render(request, 'admin/pedido_edit_form.html', {'pedido': pedido, 'estados': PEDIDO_ESTADOS}, status=400)
+
+        try:
+            ActualizarPedidoUseCase(_pedido_repository()).execute(pk, {
+                'cliente_nombre': cliente_nombre,
+                'total': total,
+                'estado': estado,
+                'numero_mesa': numero_mesa,
+                'comentarios': comentarios,
+            })
+        except LookupError:
+            raise Http404
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return render(request, 'admin/pedido_edit_form.html', {'pedido': pedido, 'estados': PEDIDO_ESTADOS}, status=400)
+
+        messages.success(request, f'Pedido #{pk} actualizado correctamente.')
+        return redirect('admin_pedidos')
+
+    return render(request, 'admin/pedido_edit_form.html', {'pedido': pedido, 'estados': PEDIDO_ESTADOS})
+
+
+@admin_only
 def pedido_create_view(request):
     reservas = ReservaModel.objects.select_related('mesa').order_by('-fecha_reserva')[:300]
     ctx = {
@@ -1462,6 +1589,58 @@ def pago_create_view(request):
         messages.success(request, 'Pago registrado correctamente.')
         return redirect('admin_pagos')
     return render(request, 'admin/pago_form.html', ctx)
+
+
+@admin_only
+def horario_delete_view(request, pk):
+    try:
+        horario = HorarioModel.objects.select_related('user').get(pk=pk)
+    except HorarioModel.DoesNotExist:
+        raise Http404
+    if request.method == 'POST':
+        horario.delete()
+        messages.success(request, 'Horario eliminado correctamente.')
+        return redirect('admin_horarios')
+    return render(request, 'admin/horario_confirm_delete.html', {'horario': horario})
+
+
+@admin_only
+def horario_edit_view(request, pk):
+    try:
+        horario = HorarioModel.objects.select_related('user').get(pk=pk)
+    except HorarioModel.DoesNotExist:
+        raise Http404
+
+    ctx = {'horario': horario, 'empleados': _empleados_queryset(), 'dias': DIAS_SEMANA}
+
+    if request.method == 'POST':
+        import re
+        user_id = _optional_int(request.POST.get('user_id'))
+        dia_semana = (request.POST.get('dia_semana') or '').strip()
+        hora_inicio = (request.POST.get('hora_inicio') or '').strip()
+        hora_fin = (request.POST.get('hora_fin') or '').strip()
+
+        if not user_id or not UserModel.objects.filter(pk=user_id).exists():
+            messages.error(request, 'Selecciona un empleado válido.')
+            return render(request, 'admin/horario_edit_form.html', ctx, status=400)
+        _time_re = re.compile(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$')
+        if not _time_re.match(hora_inicio) or not _time_re.match(hora_fin):
+            messages.error(request, 'Las horas deben tener formato HH:MM.')
+            return render(request, 'admin/horario_edit_form.html', ctx, status=400)
+        if hora_fin <= hora_inicio:
+            messages.error(request, 'La hora de fin debe ser mayor que la hora de inicio.')
+            return render(request, 'admin/horario_edit_form.html', ctx, status=400)
+
+        HorarioModel.objects.filter(pk=pk).update(
+            user_id=user_id,
+            dia_semana=dia_semana,
+            hora_inicio=hora_inicio,
+            hora_fin=hora_fin,
+        )
+        messages.success(request, 'Horario actualizado correctamente.')
+        return redirect('admin_horarios')
+
+    return render(request, 'admin/horario_edit_form.html', ctx)
 
 
 @admin_only
@@ -1673,3 +1852,33 @@ def noticia_admin_create_view(request):
     return render(request, 'admin/noticia_admin_form.html', ctx)
 
 
+
+
+@admin_only
+def solicitudes_turno_list_view(request):
+    solicitudes = SolicitudCambioTurnoModel.objects.select_related('empleado', 'horario').order_by('-fecha_creacion')
+    return render(request, 'admin/solicitudes_turno_list.html', {'solicitudes': solicitudes})
+
+
+@admin_only
+def solicitud_turno_responder_view(request, pk):
+    from django.shortcuts import get_object_or_404
+    solicitud = get_object_or_404(SolicitudCambioTurnoModel.objects.select_related('empleado'), pk=pk)
+
+    if request.method == 'POST':
+        accion = (request.POST.get('accion') or '').strip().upper()
+        respuesta = (request.POST.get('respuesta_admin') or '').strip()
+        if accion not in ('APROBADA', 'RECHAZADA'):
+            messages.error(request, 'Acción no válida.')
+            return redirect('admin_solicitudes_turno')
+        if accion == 'RECHAZADA' and not respuesta:
+            messages.error(request, 'Debes indicar el motivo del rechazo.')
+            return render(request, 'admin/solicitud_turno_responder.html', {'solicitud': solicitud})
+        SolicitudCambioTurnoModel.objects.filter(pk=pk).update(
+            estado=accion,
+            respuesta_admin=respuesta,
+        )
+        messages.success(request, f'Solicitud {accion.lower()} correctamente.')
+        return redirect('admin_solicitudes_turno')
+
+    return render(request, 'admin/solicitud_turno_responder.html', {'solicitud': solicitud})

@@ -8,6 +8,7 @@
     <h1 class="panel-page-title mb-0"><i class="bi bi-clock me-2"></i>Horarios</h1>
     <div class="d-flex flex-wrap gap-2">
       <a href="{% url 'admin_horario_nuevo' %}" class="btn btn-warning text-dark fw-semibold btn-sm"><i class="bi bi-plus-lg me-1"></i>Nuevo horario</a>
+      <a href="{% url 'admin_solicitudes_turno' %}" class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-left-right me-1"></i>Solicitudes de turno</a>
       <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left me-1"></i>Dashboard</a>
     </div>
   </div>
@@ -22,6 +23,7 @@
           <th>Día</th>
           <th>Entrada</th>
           <th>Salida</th>
+          <th class="text-end">Acciones</th>
         </tr>
       </thead>
       <tbody>
@@ -32,9 +34,13 @@
           <td>{{ h.dia_semana }}</td>
           <td>{{ h.hora_inicio|hora12 }}</td>
           <td>{{ h.hora_fin|hora12 }}</td>
+          <td class="text-end">
+            <a href="{% url 'admin_horario_edit' h.id %}" class="btn btn-sm btn-warning text-dark fw-semibold"><i class="bi bi-pencil"></i> Editar</a>
+            <a href="{% url 'admin_horario_delete' h.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Eliminar</a>
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="text-center text-muted py-4">No hay horarios.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-4">No hay horarios.</td></tr>
         {% endfor %}
       </tbody>
     </table>

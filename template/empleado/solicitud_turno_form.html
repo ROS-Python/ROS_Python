@@ -1,0 +1,88 @@
+{% extends 'layout/base.html' %}
+{% block title %}Solicitar cambio de turno{% endblock %}
+{% block page_title %}Solicitar cambio de turno{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <h1 class="panel-page-title mb-0"><i class="bi bi-arrow-left-right me-2"></i>Solicitar cambio de turno</h1>
+    <a href="{% url 'mis_solicitudes_turno' %}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-list-ul me-1"></i>Mis solicitudes
+    </a>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="row g-3 mb-3">
+        <div class="col-12">
+          <label class="form-label fw-semibold">{{ form.horario.label }}</label>
+          {{ form.horario }}
+          {% if form.horario.errors %}<div class="text-danger small mt-1">{{ form.horario.errors }}</div>{% endif %}
+          <div class="form-text">Selecciona el turno que deseas cambiar (opcional).</div>
+        </div>
+      </div>
+
+      <hr class="border-secondary">
+      <p class="text-muted small text-uppercase fw-bold mb-2">Turno actual</p>
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <label class="form-label">{{ form.dia_actual.label }}</label>
+          {{ form.dia_actual }}
+          {% if form.dia_actual.errors %}<div class="text-danger small mt-1">{{ form.dia_actual.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ form.hora_inicio_actual.label }}</label>
+          {{ form.hora_inicio_actual }}
+          {% if form.hora_inicio_actual.errors %}<div class="text-danger small mt-1">{{ form.hora_inicio_actual.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ form.hora_fin_actual.label }}</label>
+          {{ form.hora_fin_actual }}
+          {% if form.hora_fin_actual.errors %}<div class="text-danger small mt-1">{{ form.hora_fin_actual.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <hr class="border-secondary">
+      <p class="text-muted small text-uppercase fw-bold mb-2">Turno solicitado</p>
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <label class="form-label">{{ form.dia_solicitado.label }}</label>
+          {{ form.dia_solicitado }}
+          {% if form.dia_solicitado.errors %}<div class="text-danger small mt-1">{{ form.dia_solicitado.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ form.hora_inicio_solicitada.label }}</label>
+          {{ form.hora_inicio_solicitada }}
+          {% if form.hora_inicio_solicitada.errors %}<div class="text-danger small mt-1">{{ form.hora_inicio_solicitada.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ form.hora_fin_solicitada.label }}</label>
+          {{ form.hora_fin_solicitada }}
+          {% if form.hora_fin_solicitada.errors %}<div class="text-danger small mt-1">{{ form.hora_fin_solicitada.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">{{ form.motivo.label }}</label>
+        {{ form.motivo }}
+        {% if form.motivo.errors %}<div class="text-danger small mt-1">{{ form.motivo.errors }}</div>{% endif %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-warning text-dark fw-semibold">
+          <i class="bi bi-send me-1"></i>Enviar solicitud
+        </button>
+        <a href="{% url 'mi_horario' %}" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

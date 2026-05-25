@@ -24,10 +24,19 @@
       </thead>
       <tbody>
         {% for it in items %}
-        <tr>
+        <tr {% if it.cantidad_disponible <= it.cantidad_minima %}class="table-danger"{% endif %}>
           <td>{{ it.id }}</td>
           <td>{{ it.producto.nombre }}</td>
-          <td>{{ it.cantidad_disponible }}</td>
+          <td>
+            <span class="fw-bold {% if it.cantidad_disponible == 0 %}text-danger{% elif it.cantidad_disponible <= it.cantidad_minima %}text-warning{% endif %}">
+              {{ it.cantidad_disponible }}
+            </span>
+            {% if it.cantidad_disponible == 0 %}
+            <span class="badge bg-danger ms-1">Sin stock</span>
+            {% elif it.cantidad_disponible <= it.cantidad_minima %}
+            <span class="badge bg-warning text-dark ms-1"><i class="bi bi-exclamation-triangle-fill"></i> Stock bajo</span>
+            {% endif %}
+          </td>
           <td>{{ it.cantidad_minima }}</td>
         </tr>
         {% empty %}

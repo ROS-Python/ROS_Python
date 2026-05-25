@@ -4,6 +4,51 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
 from django.core.exceptions import ValidationError
 
+from users.infrastructure.models.solicitud_cambio_turno_model import SolicitudCambioTurnoModel
+from users.infrastructure.models.horario_model import HorarioModel
+
+
+DIAS_SEMANA_CHOICES = [
+    ('', '— Selecciona un día —'),
+    ('Lunes', 'Lunes'), ('Martes', 'Martes'), ('Miércoles', 'Miércoles'),
+    ('Jueves', 'Jueves'), ('Viernes', 'Viernes'), ('Sábado', 'Sábado'), ('Domingo', 'Domingo'),
+]
+
+
+class SolicitudCambioTurnoForm(forms.ModelForm):
+    dia_actual = forms.ChoiceField(choices=DIAS_SEMANA_CHOICES, label='Día actual')
+    dia_solicitado = forms.ChoiceField(choices=DIAS_SEMANA_CHOICES, label='Día solicitado')
+
+    class Meta:
+        model = SolicitudCambioTurnoModel
+        fields = [
+            'horario', 'dia_actual', 'hora_inicio_actual', 'hora_fin_actual',
+            'dia_solicitado', 'hora_inicio_solicitada', 'hora_fin_solicitada', 'motivo',
+        ]
+        widgets = {
+            'hora_inicio_actual': forms.TimeInput(attrs={'type': 'time'}),
+            'hora_fin_actual': forms.TimeInput(attrs={'type': 'time'}),
+            'hora_inicio_solicitada': forms.TimeInput(attrs={'type': 'time'}),
+            'hora_fin_solicitada': forms.TimeInput(attrs={'type': 'time'}),
+            'motivo': forms.Textarea(attrs={'rows': 3}),
+        }
+        labels = {
+            'horario': 'Turno de referencia (opcional)',
+            'hora_inicio_actual': 'Hora inicio actual',
+            'hora_fin_actual': 'Hora fin actual',
+            'hora_inicio_solicitada': 'Hora inicio solicitada',
+            'hora_fin_solicitada': 'Hora fin solicitada',
+            'motivo': 'Motivo del cambio',
+        }
+
+    def __init__(self, *args, empleado=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if empleado:
+            self.fields['horario'].queryset = HorarioModel.objects.filter(user=empleado)
+        self.fields['horario'].required = False
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'form-control')
+
 
 class EmailPasswordResetForm(PasswordResetForm):
     email = forms.EmailField(

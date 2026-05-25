@@ -99,8 +99,9 @@
 </div>
 
 <div id="reservas" class="card shadow-sm mb-4">
-  <div class="card-header bg-white border-bottom">
+  <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
     <h5 class="mb-0"><i class="bi bi-calendar-event me-2"></i>Últimas reservas</h5>
+    <a href="{% url 'reserva' %}" class="btn btn-sm btn-outline-success"><i class="bi bi-plus-lg me-1"></i>Nueva reserva</a>
   </div>
   <div class="card-body p-0">
     {% if ultimas_reservas %}
@@ -112,6 +113,7 @@
             <th>Fecha y hora</th>
             <th>Personas</th>
             <th>Estado</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -120,7 +122,30 @@
             <td><code>{{ r.codigo_reserva|default:"—" }}</code></td>
             <td>{{ r.fecha_reserva|date:"d/m/Y" }} {{ r.hora }}</td>
             <td>{{ r.numero_personas }}</td>
-            <td><span class="badge bg-secondary">{{ r.estado }}</span></td>
+            <td>
+              {% if r.estado == 'PENDIENTE' %}
+                <span class="badge bg-warning text-dark">Pendiente</span>
+              {% elif r.estado == 'CONFIRMADA' %}
+                <span class="badge bg-success">Confirmada</span>
+              {% elif r.estado == 'COMPLETADA' %}
+                <span class="badge bg-primary">Completada</span>
+              {% elif r.estado in 'CANCELADA,CANCELADO' %}
+                <span class="badge bg-danger">Cancelada</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ r.estado }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.estado == 'PENDIENTE' or r.estado == 'CONFIRMADA' %}
+              <form method="post" action="{% url 'cancelar_reserva_cliente' r.pk %}"
+                    onsubmit="return confirm('¿Seguro que deseas cancelar esta reserva?')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-x-circle me-1"></i>Cancelar
+                </button>
+              </form>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -131,6 +156,44 @@
     {% endif %}
   </div>
 </div>
+
+{% if promociones_activas %}
+<div id="promociones" class="card shadow-sm mb-4">
+  <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h5 class="mb-0"><i class="bi bi-tag-fill text-warning me-2"></i>Promociones disponibles</h5>
+    <span class="badge bg-warning text-dark">{{ promociones_activas|length }} activa{{ promociones_activas|length|pluralize:"s" }}</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      {% for promo in promociones_activas %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 border border-warning">
+          {% if promo.imagen_url %}
+          <img src="{{ promo.imagen_url }}" class="card-img-top" style="height:140px;object-fit:cover;" alt="{{ promo.titulo }}">
+          {% endif %}
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h6 class="card-title mb-0 fw-bold">{{ promo.titulo }}</h6>
+              <span class="badge bg-warning text-dark ms-2 fs-6">-{{ promo.descuento|floatformat:"0" }}%</span>
+            </div>
+            {% if promo.descripcion %}
+            <p class="card-text text-muted small flex-grow-1">{{ promo.descripcion }}</p>
+            {% endif %}
+            <p class="small text-muted mb-3">
+              <i class="bi bi-calendar-range me-1"></i>
+              {{ promo.fecha_inicio|date:"d/m/Y" }} &ndash; {{ promo.fecha_fin|date:"d/m/Y" }}
+            </p>
+            <a href="{% url 'reserva' %}" class="btn btn-warning text-dark fw-semibold btn-sm mt-auto">
+              <i class="bi bi-calendar-plus me-1"></i>Reservar con esta promo
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="d-flex flex-wrap gap-2">
   <a href="{% url 'index' %}" class="btn btn-outline-primary"><i class="bi bi-house me-1"></i>Ir al sitio público</a>

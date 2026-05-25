@@ -13,3 +13,5 @@ from .horario_model import HorarioModel
 from .noticia_model import NoticiaModel
 from .promocion_model import PromocionModel
 from .carrito_item_model import CarritoItemModel
+from .modulo_bloqueo_model import ModuloBloqueoModel
+from .solicitud_cambio_turno_model import SolicitudCambioTurnoModel

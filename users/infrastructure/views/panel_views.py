@@ -1,27 +1,37 @@
 from __future__ import annotations
 
+import json
+import time
+
 from datetime import date, datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import models
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
-from django.shortcuts import redirect, render
+from django.http import HttpResponseForbidden, StreamingHttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from users.application.application.use_cases.pedido_usecase import CambiarEstadoPedidoUseCase
 from users.infrastructure.models import (
     DetallePedidoModel,
+    InventarioModel,
     MesaModel,
     NoticiaModel,
     PagoModel,
     PedidoModel,
     ProductoModel,
+    PromocionModel,
     ReservaModel,
     UserModel,
 )
 from users.infrastructure.models.horario_model import HorarioModel
+from users.infrastructure.models.insumo_model import InsumoModel
+from users.infrastructure.models.solicitud_cambio_turno_model import SolicitudCambioTurnoModel
 from users.infrastructure.repositories.pedido_repository_impl import PedidoRepositoryImpl
+from users.forms import SolicitudCambioTurnoForm
 
 
 def _rol_upper(user):
@@ -33,7 +43,6 @@ def _rol_upper(user):
 
 
 def _coerce_orm_day(val):
-    """Unifica valores de TruncDate (date/datetime/str según motor) a `date` para alinear con el eje X."""
     if val is None:
         return None
     if isinstance(val, datetime):
@@ -46,7 +55,6 @@ def _coerce_orm_day(val):
 
 
 def _pedidos_cliente_qs(user):
-    """Pedidos del usuario excluyendo cancelados (comparación insensible a mayúsculas)."""
     return PedidoModel.objects.filter(user=user).exclude(
         Q(estado__iexact='CANCELADO') | Q(estado__iexact='CANCELADA')
     )
@@ -86,6 +94,11 @@ def mi_perfil_view(request):
     reservas_count = reservas_qs.count()
     ultimas_reservas = list(reservas_qs[:5])
 
+    hoy = timezone.localdate()
+    promociones_activas = list(
+        PromocionModel.objects.filter(fecha_inicio__lte=hoy, fecha_fin__gte=hoy).order_by('-fecha_inicio')
+    )
+
     return render(
         request,
         'cliente/perfil_panel.html',
@@ -97,6 +110,7 @@ def mi_perfil_view(request):
             'ultimos_pedidos': ultimos_pedidos,
             'reservas_count': reservas_count,
             'ultimas_reservas': ultimas_reservas,
+            'promociones_activas': promociones_activas,
         },
     )
 
@@ -106,19 +120,13 @@ def mi_horario_view(request):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
         return redirect('index')
-    qs = HorarioModel.objects.filter(user=request.user).select_related('user')
 
+    qs = HorarioModel.objects.filter(user=request.user).select_related('user')
     horarios = list(qs)
+
     day_order = {
-        'LUNES': 0,
-        'MARTES': 1,
-        'MIERCOLES': 2,
-        'MIÉRCOLES': 2,
-        'JUEVES': 3,
-        'VIERNES': 4,
-        'SABADO': 5,
-        'SÁBADO': 5,
-        'DOMINGO': 6,
+        'LUNES': 0, 'MARTES': 1, 'MIERCOLES': 2, 'MIÉRCOLES': 2,
+        'JUEVES': 3, 'VIERNES': 4, 'SABADO': 5, 'SÁBADO': 5, 'DOMINGO': 6,
     }
 
     def _sort_key(h):
@@ -127,7 +135,6 @@ def mi_horario_view(request):
 
     horarios.sort(key=_sort_key)
 
-    # Agrupamos por día para mostrarlo más claro en la UI.
     dias_horarios = []
     seen = set()
     for h in horarios:
@@ -141,6 +148,14 @@ def mi_horario_view(request):
     dias_count = len(dias_horarios)
     proxima_entrada = min((h.hora_inicio for h in horarios if h.hora_inicio), default=None)
 
+    # Horarios modificados en las últimas 24h
+    hace_24h = timezone.now() - timedelta(hours=24)
+    recientes = HorarioModel.objects.filter(
+        user=request.user,
+        fecha_actualizacion__gte=hace_24h,
+    ).values_list('dia_semana', flat=True)
+    dias_recientes = list(recientes)
+
     return render(
         request,
         'empleado/mi_horario_panel.html',
@@ -150,8 +165,69 @@ def mi_horario_view(request):
             'total_turnos': total_turnos,
             'dias_count': dias_count,
             'proxima_entrada': proxima_entrada,
+            'dias_recientes': dias_recientes,
         },
     )
+
+
+@login_required(login_url='/login/')
+def reserva_detalle_mesero_view(request, pk):
+    if _rol_upper(request.user) != 'EMPLEADO':
+        messages.warning(request, 'No tienes permiso para acceder a esa sección.')
+        return redirect('index')
+
+    reserva = get_object_or_404(ReservaModel.objects.select_related('mesa', 'user'), pk=pk)
+
+    TRANSICIONES = {
+        'PENDIENTE':  ['COMPLETADA', 'NO_SE_PRESENTO'],
+        'CONFIRMADA': ['COMPLETADA', 'NO_SE_PRESENTO'],
+        'COMPLETADA': [],
+        'NO_SE_PRESENTO': [],
+        'CANCELADA': [],
+    }
+
+    if request.method == 'POST':
+        nuevo_estado = (request.POST.get('nuevo_estado') or '').strip().upper()
+        permitidos = TRANSICIONES.get((reserva.estado or '').upper(), [])
+        if nuevo_estado not in permitidos:
+            messages.error(request, 'Transición de estado no permitida.')
+            return redirect('reserva_detalle_mesero', pk=pk)
+        ReservaModel.objects.filter(pk=pk).update(estado=nuevo_estado)
+        messages.success(request, f'Reserva actualizada a «{nuevo_estado}».')
+        return redirect('reservas_hoy_mesero')
+
+    permitidos = TRANSICIONES.get((reserva.estado or '').upper(), [])
+    return render(request, 'empleado/reserva_detalle.html', {
+        'reserva': reserva,
+        'permitidos': permitidos,
+    })
+
+
+@login_required(login_url='/login/')
+def reservas_hoy_mesero_view(request):
+    if _rol_upper(request.user) != 'EMPLEADO':
+        messages.warning(request, 'No tienes permiso para acceder a esa sección.')
+        return redirect('index')
+
+    tz = timezone.get_current_timezone()
+    fecha_str = (request.GET.get('fecha') or '').strip()
+    try:
+        today = date.fromisoformat(fecha_str)
+    except ValueError:
+        today = timezone.localdate()
+
+    inicio = timezone.datetime.combine(today, timezone.datetime.min.time()).replace(tzinfo=tz)
+    fin = timezone.datetime.combine(today, timezone.datetime.max.time()).replace(tzinfo=tz)
+    reservas = (
+        ReservaModel.objects.select_related('mesa', 'user')
+        .filter(fecha_reserva__gte=inicio, fecha_reserva__lte=fin)
+        .exclude(estado__in=['CANCELADA', 'CANCELADO'])
+        .order_by('hora')
+    )
+    return render(request, 'empleado/reservas_hoy.html', {
+        'reservas': reservas,
+        'hoy': today,
+    })
 
 
 @login_required(login_url='/login/')
@@ -171,7 +247,6 @@ def pedidos_asignados_view(request):
     estados = ['PENDIENTE', 'EN_PREPARACION', 'LISTO', 'ENTREGADO', 'CANCELADO']
     pedidos_counts = {e: qs.filter(estado=e).count() for e in estados}
 
-    # Transiciones permitidas para empleados.
     transiciones = {
         'PENDIENTE': ['EN_PREPARACION', 'CANCELADO'],
         'EN_PREPARACION': ['LISTO', 'CANCELADO'],
@@ -190,7 +265,6 @@ def pedidos_asignados_view(request):
         if not pedido_id or not nuevo_estado:
             messages.error(request, 'Datos del formulario inválidos.')
             return redirect('pedidos_asignados')
-
         try:
             pedido_id_int = int(pedido_id)
         except ValueError:
@@ -282,17 +356,25 @@ def admin_dashboard_view(request):
     chart_reservas = [int(reservas_by_day.get(d, 0)) for d in labels]
     chart_ingresos = [float(ingresos_by_day.get(d, 0.0)) for d in labels]
 
+    alertas_inventario = list(
+        InventarioModel.objects.select_related('producto')
+        .filter(cantidad_disponible__lte=models.F('cantidad_minima'))
+        .order_by('cantidad_disponible')
+    )
+    alertas_insumos = list(
+        InsumoModel.objects.filter(stock_actual__lte=models.F('stock_minimo'))
+        .order_by('stock_actual')
+    )
+
     ingresos_total = float(PagoModel.objects.aggregate(s=Sum("monto_total")).get("s") or 0.0)
     ingresos_mes = float(
         PagoModel.objects.filter(
             fecha_creacion__year=today.year,
             fecha_creacion__month=today.month,
-        ).aggregate(s=Sum("monto_total")).get("s")
-        or 0.0
+        ).aggregate(s=Sum("monto_total")).get("s") or 0.0
     )
     ingresos_hoy = float(
-        PagoModel.objects.filter(fecha_creacion__date=today).aggregate(s=Sum("monto_total")).get("s")
-        or 0.0
+        PagoModel.objects.filter(fecha_creacion__date=today).aggregate(s=Sum("monto_total")).get("s") or 0.0
     )
 
     pedidos_hoy = PedidoModel.objects.filter(fecha_creacion__date=today).count()
@@ -301,9 +383,7 @@ def admin_dashboard_view(request):
     pagos_pendientes = PagoModel.objects.filter(estado="PENDIENTE").count()
     mesas_total = MesaModel.objects.count()
     mesas_libres = MesaModel.objects.filter(estado="libre").count()
-    empleados_count = UserModel.objects.filter(
-        activo=True, rol__nombre__iexact="EMPLEADO"
-    ).count()
+    empleados_count = UserModel.objects.filter(activo=True, rol__nombre__iexact="EMPLEADO").count()
     empleados_preview = list(
         UserModel.objects.filter(activo=True, rol__nombre__iexact="EMPLEADO")
         .select_related("rol")
@@ -336,12 +416,10 @@ def admin_dashboard_view(request):
     }
 
     ultimos_pedidos = list(
-        PedidoModel.objects.select_related("user", "empleado_asignado")
-        .order_by("-fecha_creacion")[:5]
+        PedidoModel.objects.select_related("user", "empleado_asignado").order_by("-fecha_creacion")[:5]
     )
     ultimas_reservas = list(
-        ReservaModel.objects.select_related("mesa", "user")
-        .order_by("-fecha_creacion")[:5]
+        ReservaModel.objects.select_related("mesa", "user").order_by("-fecha_creacion")[:5]
     )
 
     return render(
@@ -354,5 +432,137 @@ def admin_dashboard_view(request):
             "empleados_preview": empleados_preview,
             "chart_data": chart_data,
             "hoy_label": today.strftime("%d/%m/%Y"),
+            "alertas_inventario": alertas_inventario,
+            "alertas_insumos": alertas_insumos,
         },
     )
+
+
+@login_required(login_url='/login/')
+def cancelar_reserva_cliente_view(request, pk):
+    if _rol_upper(request.user) != 'CLIENTE':
+        messages.warning(request, 'No tienes permiso para acceder a esa sección.')
+        return redirect('index')
+
+    if request.method != 'POST':
+        return redirect('mi_perfil')
+
+    reserva = (
+        ReservaModel.objects.filter(
+            pk=pk,
+        ).filter(
+            models.Q(user=request.user) | models.Q(email_cliente__iexact=request.user.email)
+        ).first()
+    )
+
+    if not reserva:
+        messages.error(request, 'Reserva no encontrada.')
+        return redirect('mi_perfil')
+
+    estado = (reserva.estado or '').upper()
+    if estado in ('CANCELADA', 'CANCELADO', 'COMPLETADA', 'NO_SE_PRESENTO'):
+        messages.warning(request, 'Esta reserva ya no puede cancelarse.')
+        return redirect('mi_perfil')
+
+    ReservaModel.objects.filter(pk=pk).update(estado='CANCELADA')
+    messages.success(request, 'Tu reserva ha sido cancelada correctamente.')
+    return redirect('mi_perfil')
+
+
+@login_required(login_url='/login/')
+def solicitud_turno_crear_view(request):
+    if _rol_upper(request.user) != 'EMPLEADO':
+        messages.warning(request, 'No tienes permiso para acceder a esa sección.')
+        return redirect('index')
+
+    if request.method == 'POST':
+        form = SolicitudCambioTurnoForm(request.POST, empleado=request.user)
+        if form.is_valid():
+            solicitud = form.save(commit=False)
+            solicitud.empleado = request.user
+            solicitud.save()
+            messages.success(request, 'Solicitud de cambio de turno enviada correctamente.')
+            return redirect('mis_solicitudes_turno')
+    else:
+        form = SolicitudCambioTurnoForm(empleado=request.user)
+
+    return render(request, 'empleado/solicitud_turno_form.html', {'form': form})
+
+
+@login_required(login_url='/login/')
+def mis_solicitudes_turno_view(request):
+    if _rol_upper(request.user) != 'EMPLEADO':
+        messages.warning(request, 'No tienes permiso para acceder a esa sección.')
+        return redirect('index')
+
+    solicitudes = SolicitudCambioTurnoModel.objects.filter(empleado=request.user)
+    return render(request, 'empleado/mis_solicitudes_turno.html', {'solicitudes': solicitudes})
+
+
+def reservas_sse_view(request):
+    if not request.user.is_authenticated or _rol_upper(request.user) != 'EMPLEADO':
+        return HttpResponseForbidden()
+
+    user_id = request.user.pk
+
+    def event_stream():
+        # Estado inicial reservas
+        ultimo_reservas = {
+            r['id']: r['estado']
+            for r in ReservaModel.objects.values('id', 'estado')
+        }
+        # Estado inicial horarios del mesero
+        ultimo_horarios = {
+            h['id']: f"{h['hora_inicio']}|{h['hora_fin']}|{h['dia_semana']}"
+            for h in HorarioModel.objects.filter(user_id=user_id)
+            .values('id', 'hora_inicio', 'hora_fin', 'dia_semana')
+        }
+
+        while True:
+            time.sleep(5)
+            try:
+                # Cambios en reservas
+                actuales_r = {
+                    r['id']: r['estado']
+                    for r in ReservaModel.objects.values('id', 'estado')
+                }
+                for rid, estado in actuales_r.items():
+                    anterior = ultimo_reservas.get(rid)
+                    if anterior is not None and anterior != estado:
+                        yield f"data: {json.dumps({'tipo': 'reserva', 'id': rid, 'estado_anterior': anterior, 'estado_nuevo': estado})}\n\n"
+                    ultimo_reservas[rid] = estado
+                for rid in set(actuales_r) - set(ultimo_reservas):
+                    yield f"data: {json.dumps({'tipo': 'reserva', 'id': rid, 'estado_anterior': None, 'estado_nuevo': actuales_r[rid]})}\n\n"
+                    ultimo_reservas[rid] = actuales_r[rid]
+
+                # Cambios en horarios del mesero
+                actuales_h = {
+                    h['id']: f"{h['hora_inicio']}|{h['hora_fin']}|{h['dia_semana']}"
+                    for h in HorarioModel.objects.filter(user_id=user_id)
+                    .values('id', 'hora_inicio', 'hora_fin', 'dia_semana')
+                }
+                for hid, val in actuales_h.items():
+                    anterior = ultimo_horarios.get(hid)
+                    if anterior is not None and anterior != val:
+                        partes = val.split('|')
+                        yield f"data: {json.dumps({'tipo': 'horario', 'dia': partes[2] if len(partes) > 2 else '', 'hora_inicio': partes[0], 'hora_fin': partes[1]})}\n\n"
+                    ultimo_horarios[hid] = val
+                # Horarios nuevos
+                for hid in set(actuales_h) - set(ultimo_horarios):
+                    partes = actuales_h[hid].split('|')
+                    yield f"data: {json.dumps({'tipo': 'horario_nuevo', 'dia': partes[2] if len(partes) > 2 else '', 'hora_inicio': partes[0], 'hora_fin': partes[1]})}\n\n"
+                    ultimo_horarios[hid] = actuales_h[hid]
+                # Horarios eliminados
+                eliminados = set(ultimo_horarios) - set(actuales_h)
+                for hid in eliminados:
+                    partes = ultimo_horarios[hid].split('|')
+                    yield f"data: {json.dumps({'tipo': 'horario_eliminado', 'dia': partes[2] if len(partes) > 2 else ''})}\n\n"
+                    del ultimo_horarios[hid]
+
+            except Exception:
+                break
+
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
