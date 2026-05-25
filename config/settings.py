@@ -89,6 +89,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'users.context_processors.carrito_publico',
+                'users.context_processors.notificaciones_no_leidas',
             ],
             'builtins': ['users.templatetags.money_filters'],
         },
@@ -106,7 +107,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'ROS_db',
         'USER': 'postgres',
-        'PASSWORD': '101606',
+        'PASSWORD': 'Alex_123',
         'HOST': '127.0.0.1',
         'PORT': '5432',
     }

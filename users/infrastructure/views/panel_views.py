@@ -30,6 +30,7 @@ from users.infrastructure.models import (
 from users.infrastructure.models.horario_model import HorarioModel
 from users.infrastructure.models.insumo_model import InsumoModel
 from users.infrastructure.models.solicitud_cambio_turno_model import SolicitudCambioTurnoModel
+from users.infrastructure.models.notificacion_model import NotificacionModel
 from users.infrastructure.repositories.pedido_repository_impl import PedidoRepositoryImpl
 from users.forms import SolicitudCambioTurnoForm
 
@@ -497,6 +498,22 @@ def mis_solicitudes_turno_view(request):
 
     solicitudes = SolicitudCambioTurnoModel.objects.filter(empleado=request.user)
     return render(request, 'empleado/mis_solicitudes_turno.html', {'solicitudes': solicitudes})
+
+
+@login_required(login_url='/login/')
+def mis_notificaciones_view(request):
+    if _rol_upper(request.user) != 'EMPLEADO':
+        messages.warning(request, 'No tienes permiso para acceder a esa sección.')
+        return redirect('index')
+    notificaciones = NotificacionModel.objects.filter(usuario=request.user)
+    return render(request, 'empleado/mis_notificaciones.html', {'notificaciones': notificaciones})
+
+
+@login_required(login_url='/login/')
+def marcar_notificaciones_leidas_view(request):
+    if request.method == 'POST' and _rol_upper(request.user) == 'EMPLEADO':
+        NotificacionModel.objects.filter(usuario=request.user, leida=False).update(leida=True)
+    return redirect('mis_notificaciones')
 
 
 def reservas_sse_view(request):

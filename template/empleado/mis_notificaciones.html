@@ -1,0 +1,54 @@
+{% extends 'layout/base.html' %}
+{% block title %}Mis Notificaciones{% endblock %}
+{% block page_title %}Mis Notificaciones{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <h1 class="panel-page-title mb-0"><i class="bi bi-bell-fill me-2"></i>Mis Notificaciones</h1>
+    {% if notificaciones %}
+    <form method="post" action="{% url 'notificaciones_leer' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-check2-all me-1"></i>Marcar todas como leídas
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    {% if notificaciones %}
+      <ul class="list-group list-group-flush">
+        {% for n in notificaciones %}
+        <li class="list-group-item bg-transparent d-flex align-items-start gap-3 py-3
+          {% if not n.leida %}border-start border-warning border-3{% endif %}">
+          <div class="mt-1">
+            {% if not n.leida %}
+              <i class="bi bi-bell-fill text-warning fs-5"></i>
+            {% else %}
+              <i class="bi bi-bell text-muted fs-5"></i>
+            {% endif %}
+          </div>
+          <div class="flex-grow-1">
+            <p class="mb-1 {% if not n.leida %}fw-semibold text-white{% else %}text-muted{% endif %}">
+              {{ n.mensaje }}
+            </p>
+            <small class="text-muted">{{ n.fecha|date:"d/m/Y H:i" }}</small>
+          </div>
+          {% if not n.leida %}
+            <span class="badge bg-warning text-dark align-self-center">Nueva</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-bell-slash display-4 d-block mb-3"></i>
+        <p class="mb-0">No tienes notificaciones.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

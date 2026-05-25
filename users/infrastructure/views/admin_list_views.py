@@ -1637,6 +1637,11 @@ def horario_edit_view(request, pk):
             hora_inicio=hora_inicio,
             hora_fin=hora_fin,
         )
+        from users.infrastructure.models.notificacion_model import NotificacionModel
+        NotificacionModel.objects.create(
+            usuario_id=user_id,
+            mensaje=f'Tu horario del {dia_semana} ha sido modificado: {hora_inicio} – {hora_fin}.',
+        )
         messages.success(request, 'Horario actualizado correctamente.')
         return redirect('admin_horarios')
 
@@ -1878,6 +1883,12 @@ def solicitud_turno_responder_view(request, pk):
             estado=accion,
             respuesta_admin=respuesta,
         )
+        from users.infrastructure.models.notificacion_model import NotificacionModel
+        estado_label = 'aprobada' if accion == 'APROBADA' else 'rechazada'
+        msg_notif = f'Tu solicitud de cambio de turno fue {estado_label}.'
+        if respuesta:
+            msg_notif += f' Nota del admin: {respuesta}'
+        NotificacionModel.objects.create(usuario=solicitud.empleado, mensaje=msg_notif)
         messages.success(request, f'Solicitud {accion.lower()} correctamente.')
         return redirect('admin_solicitudes_turno')
 

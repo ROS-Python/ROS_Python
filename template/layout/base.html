@@ -67,6 +67,10 @@
             <a href="{% url 'mi_horario' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-clock me-2"></i>Mi Horario</a>
             <a href="{% url 'pedidos_asignados' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-cart-check me-2"></i>Pedidos Asignados</a>
             <a href="{% url 'reservas_hoy_mesero' %}" class="list-group-item list-group-item-action bg-dark text-white"><i class="bi bi-calendar-day me-2"></i>Reservas del Día</a>
+            <a href="{% url 'mis_notificaciones' %}" class="list-group-item list-group-item-action bg-dark text-white d-flex align-items-center justify-content-between">
+              <span><i class="bi bi-bell me-2"></i>Notificaciones</span>
+              {% if notif_no_leidas %}<span class="badge bg-warning text-dark">{{ notif_no_leidas }}</span>{% endif %}
+            </a>
           {% endif %}
 
         {% endwith %}

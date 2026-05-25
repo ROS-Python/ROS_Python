@@ -61,6 +61,8 @@ from users.infrastructure.views.panel_views import (
     reservas_sse_view,
     solicitud_turno_crear_view,
     mis_solicitudes_turno_view,
+    mis_notificaciones_view,
+    marcar_notificaciones_leidas_view,
 )
 from users.infrastructure.views.insumo_views import (
     insumos_list_view,
@@ -169,6 +171,8 @@ urlpatterns = [
     path('solicitudes-turno/<int:pk>/responder/', solicitud_turno_responder_view, name='admin_solicitud_turno_responder'),
     path('mi-solicitud-turno/', solicitud_turno_crear_view, name='solicitud_turno_crear'),
     path('mis-solicitudes-turno/', mis_solicitudes_turno_view, name='mis_solicitudes_turno'),
+    path('mis-notificaciones/', mis_notificaciones_view, name='mis_notificaciones'),
+    path('mis-notificaciones/leer/', marcar_notificaciones_leidas_view, name='notificaciones_leer'),
     path('reportes/pdf/', reportes_pdf_view, name='reportes_pdf'),
     path('reportes/', reportes_admin_view, name='reportes_admin'),
     path('carrito/agregar/', carrito_agregar_view, name='carrito_agregar'),

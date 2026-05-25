@@ -13,3 +13,4 @@ from users.infrastructure.models.horario_model import HorarioModel
 from users.infrastructure.models.noticia_model import NoticiaModel
 from users.infrastructure.models.promocion_model import PromocionModel
 from users.infrastructure.models.carrito_item_model import CarritoItemModel
+from users.infrastructure.models.notificacion_model import NotificacionModel
