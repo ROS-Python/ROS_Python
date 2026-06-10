@@ -2,9 +2,6 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV SECRET_KEY=build-secret-key-placeholder-only-for-collectstatic
-ENV DEBUG=False
-ENV DATABASE_URL=sqlite:////tmp/build.db
 
 WORKDIR /app
 
@@ -19,8 +16,10 @@ COPY . .
 
 RUN mkdir -p /app/staticfiles /app/media
 
-RUN python manage.py collectstatic --noinput --clear
+RUN DATABASE_URL=sqlite:////tmp/build.db SECRET_KEY=build-only DEBUG=True python manage.py collectstatic --noinput --clear
+
+RUN chmod +x start.sh
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
+CMD ["./start.sh"]
