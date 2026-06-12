@@ -44,6 +44,8 @@ SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
     'django-insecure-dev-only-set-DJANGO_SECRET_KEY-in-env',
 )
+# Ajuste para probar commit
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'true').lower() in ('1', 'true', 'yes')
