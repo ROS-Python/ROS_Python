@@ -50,8 +50,17 @@ DEBUG = os.environ.get('DEBUG', 'true').lower() in ('1', 'true', 'yes')
 
 # Evita "Invalid HTTP_HOST" en local y permite enlaces de recuperación con 127.0.0.1 o localhost.
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver'] + [
-    h for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h
+    h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()
 ]
+
+# En producción acepta el host de Railway automáticamente
+if not DEBUG:
+    ALLOWED_HOSTS += ['*']
+    CSRF_TRUSTED_ORIGINS = [
+        f'https://{h.strip()}'
+        for h in os.environ.get('ALLOWED_HOSTS', '').split(',')
+        if h.strip()
+    ] or ['https://*.up.railway.app']
 
 
 # Application definition
