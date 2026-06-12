@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import dj_database_url
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -39,13 +40,10 @@ _load_dotenv()
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# Definir DJANGO_SECRET_KEY en el entorno o en `.env` (ver `.env.example`).
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
     'django-insecure-dev-only-set-DJANGO_SECRET_KEY-in-env',
 )
-# Ajuste para probar commit
-
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'true').lower() in ('1', 'true', 'yes')
@@ -130,28 +128,26 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-import dj_database_url
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-_DB_URL = os.environ.get('DATABASE_URL') or (
-    f"postgresql://{os.environ.get('POSTGRES_USER','postgres')}"
-    f":{os.environ.get('POSTGRES_PASSWORD','101606')}"
-    f"@{os.environ.get('POSTGRES_HOST','127.0.0.1')}"
-    f":{os.environ.get('POSTGRES_PORT','5432')}"
-    f"/{os.environ.get('POSTGRES_DB','ROS_db')}"
-)
-
-try:
+if DATABASE_URL:
+    # PRODUCCIÓN (Railway): Fuerza el uso de la URL privada configurada en el entorno
     DATABASES = {
         'default': dj_database_url.config(
-            default=_DB_URL,
+            default=DATABASE_URL,
             conn_max_age=600,
         )
     }
-except Exception:
+else:
+    # DESARROLLO (Local): Cae aquí solo si estás en tu computadora local
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': '/tmp/fallback.db',
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('POSTGRES_DB', 'ROS_db'),
+            'USER': os.environ.get('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.environ.get('POSTGRES_PASSWORD', '101606'),
+            'HOST': os.environ.get('POSTGRES_HOST', '127.0.0.1'),
+            'PORT': os.environ.get('POSTGRES_PORT', '5432'),
         }
     }
 
@@ -208,8 +204,6 @@ AUTH_USER_MODEL = 'users.User'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Recuperación de contraseña: en desarrollo el correo se imprime en la consola del servidor.
-# En producción configura SMTP (p. ej. EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD).
 
 # --- CONFIGURACIÓN DE CORREO ACTUALIZADA ---
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND') or 'django.core.mail.backends.smtp.EmailBackend'
@@ -218,11 +212,10 @@ if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend' or os.environ.
     EMAIL_HOST = os.environ.get('SMTP_HOST') or 'smtp.gmail.com'
     EMAIL_PORT = int(os.environ.get('SMTP_PORT', '587'))
     EMAIL_HOST_USER = os.environ.get('SMTP_USER') or 'jeisonpinilla14@gmail.com'
-    EMAIL_HOST_PASSWORD = os.environ.get('SMTP_PASSWORD') or 'welk kamo aise qrsf' # Tu código de 16 letras
+    EMAIL_HOST_PASSWORD = os.environ.get('SMTP_PASSWORD') or 'welk kamo aise qrsf'
     EMAIL_USE_TLS = os.environ.get('SMTP_USE_TLS', 'true').lower() in ('1', 'true', 'yes')
     EMAIL_USE_SSL = os.environ.get('SMTP_USE_SSL', 'false').lower() in ('1', 'true', 'yes')
 else:
-    # Si cambias el backend a consola en el .env, caerá aquí
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 DEFAULT_FROM_EMAIL = (
@@ -232,6 +225,7 @@ DEFAULT_FROM_EMAIL = (
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 PASSWORD_RESET_TIMEOUT = 180  # 3 minutos (solo pruebas)
+
 
 # --- SendPulse (correos masivos) ---
 SENDPULSE_CLIENT_ID = os.environ.get('SENDPULSE_CLIENT_ID', '')
