@@ -321,16 +321,18 @@ def pedidos_asignados_view(request):
 
 
 def home_redirect_view(request):
-    if not request.user.is_authenticated:
-        return redirect('login')
-    rol = _rol_upper(request.user)
-    if rol == 'ADMINISTRADOR' or request.user.is_superuser or request.user.is_staff:
-        return redirect('admin_dashboard')
-    if rol == 'EMPLEADO':
-        return redirect('pedidos_asignados')
-    if rol == 'CLIENTE':
-        return redirect('mi_perfil')
-    return redirect('login')
+    """Ruta raiz: muestra pagina publica. Si esta autenticado, redirige a su panel."""
+    if request.user.is_authenticated:
+        rol = _rol_upper(request.user)
+        if rol == 'ADMINISTRADOR' or request.user.is_superuser or request.user.is_staff:
+            return redirect('admin_dashboard')
+        if rol == 'EMPLEADO':
+            return redirect('pedidos_asignados')
+        if rol == 'CLIENTE':
+            return redirect('mi_perfil')
+    # No autenticado o rol desconocido: mostrar pagina publica
+    from users.infrastructure.views.public_views import index_view
+    return index_view(request)
 
 
 @login_required(login_url='/login/')
