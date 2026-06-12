@@ -305,8 +305,9 @@ def pedidos_asignados_view(request):
     )
 
 
-@login_required(login_url='/login/')
 def home_redirect_view(request):
+    if not request.user.is_authenticated:
+        return redirect('login')
     rol = _rol_upper(request.user)
     if rol == 'ADMINISTRADOR':
         return redirect('admin_dashboard')

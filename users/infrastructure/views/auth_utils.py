@@ -31,4 +31,4 @@ def post_login_redirect_url(user):
         except NoReverseMatch:
             return '/mi-horario/'
 
-    return getattr(settings, 'LOGIN_REDIRECT_URL', '/') or '/'
+    return resolve_url('login')
