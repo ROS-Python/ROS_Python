@@ -65,7 +65,7 @@ def _pedidos_cliente_qs(user):
 def mi_perfil_view(request):
     if _rol_upper(request.user) != 'CLIENTE':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('pedidos_asignados')
 
     user = request.user
     pedidos_qs = _pedidos_cliente_qs(user)
@@ -120,7 +120,7 @@ def mi_perfil_view(request):
 def mi_horario_view(request):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('mi_perfil')
 
     qs = HorarioModel.objects.filter(user=request.user).select_related('user')
     horarios = list(qs)
@@ -175,7 +175,7 @@ def mi_horario_view(request):
 def reserva_detalle_mesero_view(request, pk):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('mi_perfil')
 
     reserva = get_object_or_404(ReservaModel.objects.select_related('mesa', 'user'), pk=pk)
 
@@ -208,7 +208,7 @@ def reserva_detalle_mesero_view(request, pk):
 def reservas_hoy_mesero_view(request):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('mi_perfil')
 
     tz = timezone.get_current_timezone()
     fecha_str = (request.GET.get('fecha') or '').strip()
@@ -235,7 +235,7 @@ def reservas_hoy_mesero_view(request):
 def pedidos_asignados_view(request):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('mi_perfil')
 
     repo = PedidoRepositoryImpl()
     qs = (
@@ -313,14 +313,16 @@ def home_redirect_view(request):
         return redirect('admin_dashboard')
     if rol == 'EMPLEADO':
         return redirect('pedidos_asignados')
-    return redirect('mi_perfil')
+    if rol == 'CLIENTE':
+        return redirect('mi_perfil')
+    return redirect('login')
 
 
 @login_required(login_url='/login/')
 def admin_dashboard_view(request):
     if _rol_upper(request.user) != 'ADMINISTRADOR':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('pedidos_asignados') if _rol_upper(request.user) == 'EMPLEADO' else redirect('mi_perfil')
 
     today = timezone.localdate()
     start = today - timedelta(days=6)
@@ -454,7 +456,7 @@ def admin_dashboard_view(request):
 def cancelar_reserva_cliente_view(request, pk):
     if _rol_upper(request.user) != 'CLIENTE':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('pedidos_asignados')
 
     if request.method != 'POST':
         return redirect('mi_perfil')
@@ -485,7 +487,7 @@ def cancelar_reserva_cliente_view(request, pk):
 def solicitud_turno_crear_view(request):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('mi_perfil')
 
     if request.method == 'POST':
         form = SolicitudCambioTurnoForm(request.POST, empleado=request.user)
@@ -505,7 +507,7 @@ def solicitud_turno_crear_view(request):
 def mis_solicitudes_turno_view(request):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('mi_perfil')
 
     solicitudes = SolicitudCambioTurnoModel.objects.filter(empleado=request.user)
     return render(request, 'empleado/mis_solicitudes_turno.html', {'solicitudes': solicitudes})
@@ -515,23 +517,7 @@ def mis_solicitudes_turno_view(request):
 def mis_notificaciones_view(request):
     if _rol_upper(request.user) != 'EMPLEADO':
         messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
-    notificaciones = NotificacionModel.objects.filter(usuario=request.user)
-    return render(request, 'empleado/mis_notificaciones.html', {'notificaciones': notificaciones})
-
-
-@login_required(login_url='/login/')
-def marcar_notificaciones_leidas_view(request):
-    if request.method == 'POST' and _rol_upper(request.user) == 'EMPLEADO':
-        NotificacionModel.objects.filter(usuario=request.user, leida=False).update(leida=True)
-    return redirect('mis_notificaciones')
-
-
-@login_required(login_url='/login/')
-def mis_notificaciones_view(request):
-    if _rol_upper(request.user) != 'EMPLEADO':
-        messages.warning(request, 'No tienes permiso para acceder a esa sección.')
-        return redirect('index')
+        return redirect('admin_dashboard') if _rol_upper(request.user) == 'ADMINISTRADOR' else redirect('mi_perfil')
     notificaciones = NotificacionModel.objects.filter(usuario=request.user)
     return render(request, 'empleado/mis_notificaciones.html', {'notificaciones': notificaciones})
 
