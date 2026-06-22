@@ -1,13 +1,7 @@
 Django>=5.0,<6.1
 reportlab>=4.0
 psycopg2-binary>=2.9
-<<<<<<< HEAD
 dj-database-url>=2.1
 gunicorn>=21.2
 whitenoise>=6.6
-=======
-gunicorn>=21.0
-whitenoise>=6.6
-dj-database-url>=2.1
 requests>=2.34
->>>>>>> 288d5f882f41dcd3af6c2fb0d54740c06fa800bc
