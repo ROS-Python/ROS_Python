@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import dj_database_url
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -46,10 +47,13 @@ SECRET_KEY = os.environ.get(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-# Evita "Invalid HTTP_HOST" en local y permite enlaces de recuperación con 127.0.0.1 o localhost.
+# En Railway se inyecta RAILWAY_STATIC_URL; lo usamos para detectar producción.
+_railway_host = os.environ.get('RAILWAY_STATIC_URL', '')
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver']
+if _railway_host:
+    ALLOWED_HOSTS += [_railway_host, f'.{_railway_host}', '.up.railway.app']
 
 
 # Application definition
@@ -66,6 +70,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -102,16 +107,32 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ROS_db',
-        'USER': 'postgres',
-        'PASSWORD': 'Alex_123',
-        'HOST': '127.0.0.1',
-        'PORT': '5432',
+# --- Base de datos ---
+# En Railway se provee DATABASE_URL automáticamente.
+# En local se usan las variables del archivo .env.
+_DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if _DATABASE_URL:
+    # Producción: Railway inyecta esta variable con la URL completa de Postgres.
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=_DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
-}
+else:
+    # Desarrollo local: usa las variables del .env
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('POSTGRES_DB', '<nombre_bd_local>'),
+            'USER': os.environ.get('POSTGRES_USER', '<usuario_local>'),
+            'PASSWORD': os.environ.get('POSTGRES_PASSWORD', '<contraseña_local>'),
+            'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+            'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        }
+    }
 
 
 # Password validation
@@ -151,7 +172,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
