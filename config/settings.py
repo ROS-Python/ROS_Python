@@ -54,17 +54,27 @@ SECRET_KEY = os.environ.get(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'localhost',
-    'testserver',
-    'rospython-production-a433.up.railway.app',
-    '.up.railway.app',
-]
+# Hosts base siempre presentes (local + testserver)
+_ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver']
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://rospython-production-a433.up.railway.app',
-]
+# Railway inyecta RAILWAY_PUBLIC_DOMAIN con el dominio exacto del servicio.
+# Se agrega dinámicamente para no hardcodear el dominio en el código fuente.
+_railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
+if _railway_domain:
+    _ALLOWED_HOSTS.append(_railway_domain)
+
+# Dominio fijo como red de seguridad (cubre el caso en que la variable no llegue).
+_ALLOWED_HOSTS.append('.up.railway.app')
+
+ALLOWED_HOSTS = _ALLOWED_HOSTS
+
+# CSRF: debe incluir el esquema https:// obligatoriamente.
+_csrf_origins = ['http://127.0.0.1', 'http://localhost']
+if _railway_domain:
+    _csrf_origins.append(f'https://{_railway_domain}')
+_csrf_origins.append('https://rospython-production-a433.up.railway.app')
+
+CSRF_TRUSTED_ORIGINS = _csrf_origins
 
 
 # Application definition
