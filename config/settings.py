@@ -54,11 +54,13 @@ SECRET_KEY = os.environ.get(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-# En Railway se inyecta RAILWAY_STATIC_URL; lo usamos para detectar producción.
-_railway_host = os.environ.get('RAILWAY_STATIC_URL', '')
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver']
-if _railway_host:
-    ALLOWED_HOSTS += [_railway_host, f'.{_railway_host}', '.up.railway.app']
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'testserver',
+    'rospython-production-a433.up.railway.app',
+    '.up.railway.app',
+]
 
 
 # Application definition
