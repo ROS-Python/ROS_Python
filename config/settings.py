@@ -18,6 +18,11 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+# Captura DATABASE_URL ANTES de cargar el .env local.
+# Así Railway siempre tiene prioridad absoluta sobre cualquier valor del .env.
+_DATABASE_URL_FROM_ENVIRONMENT = os.environ.get('DATABASE_URL')
+
+
 def _load_dotenv():
     """Carga variables desde `.env` en la raíz del proyecto (no versionar .env)."""
     path = BASE_DIR / '.env'
@@ -108,21 +113,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 # --- Base de datos ---
-# En Railway se provee DATABASE_URL automáticamente.
-# En local se usan las variables del archivo .env.
-_DATABASE_URL = os.environ.get('DATABASE_URL')
-
-if _DATABASE_URL:
-    # Producción: Railway inyecta esta variable con la URL completa de Postgres.
+# _DATABASE_URL_FROM_ENVIRONMENT se capturó ANTES de _load_dotenv(),
+# por lo que siempre refleja la variable real del sistema (Railway),
+# nunca un valor sobreescrito por el .env local.
+if _DATABASE_URL_FROM_ENVIRONMENT:
     DATABASES = {
-        'default': dj_database_url.config(
-            default=_DATABASE_URL,
+        'default': dj_database_url.parse(
+            _DATABASE_URL_FROM_ENVIRONMENT,
             conn_max_age=600,
             ssl_require=True,
         )
     }
 else:
-    # Desarrollo local: usa las variables del .env
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
