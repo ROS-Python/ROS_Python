@@ -62,6 +62,10 @@ ALLOWED_HOSTS = [
     '.up.railway.app',
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://rospython-production-a433.up.railway.app',
+]
+
 
 # Application definition
 
